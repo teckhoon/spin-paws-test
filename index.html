@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>스핀포 Spin Paws</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14121f; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { image-rendering: pixelated; touch-action: none; user-select: none; cursor: default; display: block; }
+  #bgfill { position: fixed; left: 0; top: 0; z-index: 0; image-rendering: pixelated; pointer-events: none; }
+  #screen { position: fixed; z-index: 1; }
+  #pk { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #e8c88a; font: 14px sans-serif; z-index: 2; }
+</style>
+</head>
+<body>
+<canvas id="bgfill"></canvas>
+<canvas id="screen"></canvas>
+<div id="pk">0%</div>
+<script>
+// 저장소가 막힌 곳(격리된 틀 등)에서는 메모리 저장으로 대신 — 게임은 그대로 돌고, 닫으면 기록만 사라짐
+(() => { let ok = true; try { const k = '__t'; window.localStorage.setItem(k, '1'); window.localStorage.removeItem(k); } catch (e) { ok = false; }
+  if (!ok) { const m = {}; const st = { getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, removeItem: k => { delete m[k]; }, clear: () => { for (const k in m) delete m[k]; }, key: i => Object.keys(m)[i] || null, get length() { return Object.keys(m).length; } };
+    try { Object.defineProperty(window, 'localStorage', { value: st, configurable: true }); } catch (e) {} } })();
+// 오류가 나면 화면에 보이게 (테스트 빌드)
+window.addEventListener('error', e => { let d = document.getElementById('perr'); if (!d) { d = document.createElement('div'); d.id = 'perr'; d.style.cssText = 'position:fixed;left:8px;bottom:8px;right:8px;z-index:9;color:#ffb0a0;font:12px monospace;background:rgba(0,0,0,.75);padding:6px;white-space:pre-wrap'; document.body.appendChild(d); } d.textContent += (e.message || e) + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno + '\n'; });
+window.addEventListener('unhandledrejection', e => { const ev = new ErrorEvent('error', { message: 'promise: ' + (e.reason && e.reason.message || e.reason) }); window.dispatchEvent(ev); });
+(async () => {
+  const pk = document.getElementById('pk');
+  try {
+    const idx = await (await fetch('pack/index.json')).json();
+    let done = 0; const total = idx.parts.length;
+    const parts = await Promise.all(idx.parts.map(p => fetch('pack/' + p).then(r => { if (!r.ok) throw new Error(p + ' ' + r.status); return r.arrayBuffer(); }).then(b => { done++; pk.textContent = Math.round(done / total * 100) + '%'; return b; })));
+    const map = {};
+    const b64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+    for (const k in idx.files) { const [pi, off, len, mime] = idx.files[k], u8 = new Uint8Array(parts[pi], off, len); map[k] = /^(audio|font)\//.test(mime) ? 'data:' + mime + ';base64,' + b64(u8) : URL.createObjectURL(new Blob([u8], { type: mime })); } // 글꼴·소리는 data: (보안 정책상 blob 이 막히는 곳 대비)
+    window.APACK = map;
+    for (const [fam, file] of idx.fonts) { const u = map['assets/fonts/' + file]; if (!u) continue; const f = new FontFace(fam, 'url(' + u + ')'); try { await f.load(); document.fonts.add(f); } catch (e) {} }
+    pk.remove();
+    if (/dbg/.test(location.hash) || window.PACK_DEBUG) setInterval(() => { try { let d = document.getElementById('pdbg'); if (!d) { d = document.createElement('div'); d.id = 'pdbg'; d.style.cssText = 'position:fixed;left:8px;top:8px;z-index:9;color:#9ff;font:12px monospace;background:rgba(0,0,0,.7);padding:4px'; document.body.appendChild(d); } const pend = window.__pend ? [...window.__pend].slice(0, 6).join(' ') : ''; d.textContent = 'load ' + LOADN.d + '/' + LOADN.t + ' boot ' + (BOOT.end ? 'end' : 't=' + BOOT.t.toFixed(1) + ' sh=' + BOOT.shown.toFixed(2)) + ' logo ' + !!(BOOT_LOGO && BOOT_LOGO.c) + '/' + !!IMG.logo + ' ' + pend; } catch (e) {} }, 500);
+    if (/dbg/.test(location.hash) || window.PACK_DEBUG) { const rev = {}; for (const k in map) rev[map[k]] = k; const I0 = window.Image; window.__pend = new Set(); window.Image = function () { const im = new I0(); const k = () => window.__pend.delete(im.__s); im.addEventListener('load', k); im.addEventListener('error', k); const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src'); Object.defineProperty(im, 'src', { get() { return d.get.call(im); }, set(v) { im.__s = rev[v] || String(v).slice(0, 60); window.__pend.add(im.__s); d.set.call(im, v); } }); return im; }; } // 디버그: 안 끝난 그림 추적
+    for (const s of idx.scripts) await new Promise((res, rej) => { const e = document.createElement('script'); e.src = s; e.onload = res; e.onerror = () => rej(new Error(s)); document.body.appendChild(e); });
+  } catch (e) { pk.textContent = '불러오지 못했습니다: ' + e.message; }
+})();
+</script>
+</body>
+</html>
