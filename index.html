@@ -28,7 +28,7 @@ window.addEventListener('unhandledrejection', e => { const ev = new ErrorEvent('
 (async () => {
   const pk = document.getElementById('pk');
   try {
-    const idx = await (await fetch('pack/index.json')).json();
+    const idx = await (await fetch('pack/index.json?t=' + Date.now(), { cache: 'no-store' })).json(); // 매번 새 목록 (옛 판 코드가 섞이지 않게)
     let done = 0; const total = idx.parts.length;
     const parts = await Promise.all(idx.parts.map(p => fetch('pack/' + p).then(r => { if (!r.ok) throw new Error(p + ' ' + r.status); return r.arrayBuffer(); }).then(b => { done++; pk.textContent = Math.round(done / total * 100) + '%'; return b; })));
     const map = {};
